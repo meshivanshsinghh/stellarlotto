@@ -3,6 +3,9 @@
 .env.local
 .env*.local
 
+contracts/lottery_pool/target/
+contracts/mock_usdc/target/
+
 # Rust/Cargo
 target/
 Cargo.lock
