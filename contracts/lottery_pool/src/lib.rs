@@ -16,6 +16,8 @@ pub enum DataKey {
     YieldRate,
     RoundDuration,
     MinDeposit,
+    TotalVolume,  // NEW: Track total USDC volume
+    TotalPlayers, // NEW: Track total unique players
 }
 
 #[contracttype]
@@ -38,6 +40,16 @@ pub struct PlayerEntry {
     pub deposit: i128,
     pub round_id: u32,
     pub has_claimed: bool,
+}
+
+// NEW: Global statistics struct
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GlobalStats {
+    pub total_rounds: u32,
+    pub total_volume: i128,
+    pub total_players: u32,
+    pub total_prizes_paid: i128,
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -90,6 +102,14 @@ impl LotteryPool {
         env.storage()
             .instance()
             .set(&DataKey::MinDeposit, &min_deposit);
+
+        // Initialize global stats
+        env.storage()
+            .persistent()
+            .set(&DataKey::TotalVolume, &0i128);
+        env.storage()
+            .persistent()
+            .set(&DataKey::TotalPlayers, &0u32);
 
         let current_time = env.ledger().timestamp();
         let round = Round {
@@ -184,6 +204,25 @@ impl LotteryPool {
             .persistent()
             .set(&DataKey::Round(current_round_id), &round);
 
+        // NEW: Update global stats
+        let total_vol: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::TotalVolume)
+            .unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&DataKey::TotalVolume, &(total_vol + amount));
+
+        let total_players: u32 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::TotalPlayers)
+            .unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&DataKey::TotalPlayers, &(total_players + 1));
+
         // Emit event using v21 syntax
         env.events().publish(
             (symbol_short!("entered"), player.clone()),
@@ -250,11 +289,6 @@ impl LotteryPool {
             panic!("No players in this round");
         }
 
-        // Select random winner using ledger data
-        let seed = env.ledger().timestamp() ^ (env.ledger().sequence() as u64);
-        let winner_index = (seed % players.len() as u64) as u32;
-        let winner = players.get(winner_index).unwrap();
-
         // Calculate yield (mock 10% APY for demo)
         let yield_rate: u32 = env.storage().instance().get(&DataKey::YieldRate).unwrap();
         let round_duration: u64 = env
@@ -266,6 +300,65 @@ impl LotteryPool {
         // Mock yield: (total * rate * duration) / (year in seconds * basis points)
         let mock_yield = (round.total_deposits * yield_rate as i128 * round_duration as i128)
             / (365 * 24 * 60 * 60 * 10000);
+
+        // NEW: JACKPOT ROLLOVER - If less than 3 players, roll yield to next round!
+        if players.len() < 3 {
+            round.is_active = false;
+            round.total_yield = mock_yield;
+
+            // Refund all players their deposits
+            let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
+            let token_client = token::Client::new(&env, &usdc_token);
+
+            for player in players.iter() {
+                let entry: PlayerEntry = env
+                    .storage()
+                    .persistent()
+                    .get(&DataKey::PlayerDeposit(current_round_id, player.clone()))
+                    .unwrap();
+
+                token_client.transfer(&env.current_contract_address(), &player, &entry.deposit);
+            }
+
+            env.storage()
+                .persistent()
+                .set(&DataKey::Round(current_round_id), &round);
+
+            // Start new round WITH ROLLED OVER YIELD AS JACKPOT
+            let new_round_id = current_round_id + 1;
+            let new_round = Round {
+                id: new_round_id,
+                start_time: current_time,
+                end_time: current_time + round_duration,
+                total_deposits: mock_yield, // JACKPOT STARTS WITH PREVIOUS YIELD!
+                total_yield: 0,
+                winner: None,
+                is_active: true,
+                player_count: 0,
+            };
+
+            env.storage()
+                .instance()
+                .set(&DataKey::CurrentRound, &new_round_id);
+            env.storage()
+                .persistent()
+                .set(&DataKey::Round(new_round_id), &new_round);
+            env.storage().persistent().set(
+                &DataKey::PlayerList(new_round_id),
+                &Vec::<Address>::new(&env),
+            );
+
+            // Emit jackpot event
+            env.events()
+                .publish((symbol_short!("jackpot"), new_round_id), mock_yield);
+
+            panic!("Not enough players! Yield rolled to next round as JACKPOT!");
+        }
+
+        // Normal flow: Select random winner
+        let seed = env.ledger().timestamp() ^ (env.ledger().sequence() as u64);
+        let winner_index = (seed % players.len() as u64) as u32;
+        let winner = players.get(winner_index).unwrap();
 
         round.total_yield = mock_yield;
         round.winner = Some(winner.clone());
@@ -385,6 +478,7 @@ impl LotteryPool {
         );
     }
 
+    // FIXED: trick_or_treat now actually pays out USDC!
     pub fn trick_or_treat(env: Env, player: Address) -> i128 {
         player.require_auth();
 
@@ -392,24 +486,48 @@ impl LotteryPool {
             .instance()
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 
-        let current_round_id: u32 = env
-            .storage()
-            .instance()
-            .get(&DataKey::CurrentRound)
-            .unwrap();
-
-        // Check if player already got trick-or-treat this round
-        let tot_key = DataKey::PlayerDeposit(current_round_id, player.clone());
-
         // Simple random prize between 1-10 USDC (in stroops: 7 decimals)
         let seed = env.ledger().timestamp() ^ (env.ledger().sequence() as u64);
         let prize = ((seed % 10) + 1) as i128 * 10_000_000; // 1-10 USDC
+
+        // ACTUALLY PAY THE PRIZE
+        let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
+        let token_client = token::Client::new(&env, &usdc_token);
+        token_client.transfer(&env.current_contract_address(), &player, &prize);
 
         // Emit event
         env.events()
             .publish((symbol_short!("treat"), player.clone()), prize);
 
         prize
+    }
+
+    // NEW: Get global statistics
+    pub fn get_stats(env: Env) -> GlobalStats {
+        let current_round_id: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::CurrentRound)
+            .unwrap_or(1);
+
+        let total_volume: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::TotalVolume)
+            .unwrap_or(0);
+
+        let total_players: u32 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::TotalPlayers)
+            .unwrap_or(0);
+
+        GlobalStats {
+            total_rounds: current_round_id - 1, // Minus current active round
+            total_volume,
+            total_players,
+            total_prizes_paid: total_volume / 100, // Mock: assume 1% yield paid out
+        }
     }
 
     // Get specific round info
