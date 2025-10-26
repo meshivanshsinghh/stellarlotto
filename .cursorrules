@@ -1,417 +1,274 @@
-# StellarLotto - Halloween Lottery Game
+Here's your updated `.cursorrules` file with clear guidelines:
 
-## Project Context
+````markdown
+# StellarLotto - Halloween No-Loss Lottery Game
 
-You are building StellarLotto, a no-loss lottery game for the EasyA x Stellar Harvard Hack-o-Ween hackathon (Oct 25-26, 2025). This is a Track 2 (Smart Contract Games) submission with a Halloween theme.
+# EasyA x Stellar Harvard Hack-o-Ween Hackathon (Oct 25-26, 2025)
 
-## Game Concept
+## PROJECT STATUS: ~20 HOURS REMAINING
 
-A lottery where players CANNOT lose money. Everyone deposits USDC, the pool earns yield, one winner takes ALL yield, everyone else gets their deposit back. Think "PoolTogether" but with Halloween vibes.
+Track 2 submission - Smart Contract Games
+Current Prize Target: $6,666 (first place)
 
-## Technical Stack
+## CORE CONCEPT - DO NOT CHANGE
 
-- Blockchain: Stellar (Testnet)
-- Smart Contracts: Rust with Soroban SDK
-- Frontend: Next.js 14, TypeScript, Tailwind CSS
-- Animations: Framer Motion
-- Wallet: Freighter
-- UI Theme: Halloween (dark purples, oranges, spooky animations)
+- No-loss lottery where NOBODY loses money
+- Winners get ALL yield, losers get full refund
+- Halloween themed with spooky UI
+- 3 pool sizes: Small (10+ USDC), Medium (100+ USDC), Whale (500+ USDC)
 
-## Project Structure
+## ✅ COMPLETED FEATURES
 
-```
+### Smart Contracts
 
-stellar-lotto/
-├── contracts/
-│ ├── lottery_pool/
-│ │ ├── src/
-│ │ │ └── lib.rs # Main lottery logic
-│ │ └── Cargo.toml
-│ └── mock_usdc/ # Mock USDC for testing
-├── frontend/
-│ ├── app/
-│ │ ├── layout.tsx # Dark Halloween theme
-│ │ ├── page.tsx # Main lottery page
-│ │ └── api/
-│ ├── components/
-│ │ ├── LotteryPool.tsx # Main game component
-│ │ ├── SpookyCountdown.tsx # Halloween countdown
-│ │ ├── WinnerCauldron.tsx # Winner selection animation
-│ │ ├── GhostPlayers.tsx # Player list with ghost avatars
-│ │ └── PumpkinWallet.tsx # Wallet connector
-│ └── public/
-│ ├── sounds/ # Spooky sound effects
-│ └── images/ # Halloween graphics
-└── scripts/
-├── deploy.sh
-└── demo-setup.sh # Pre-populate for demo
+- lottery_pool contract with all core functions
+- mock_usdc contract (NEEDS approve/transfer_from fix)
+- Jackpot rollover if <3 players
+- Event emissions for frontend
 
-```
+### Core Mechanics Working
 
-## Smart Contract Guidelines
+- enter_lottery(player, amount)
+- pick_winner() with randomness
+- claim_refund() for losers
+- get_current_round() for UI
 
-### Core Functions
+## 🔧 CRITICAL FIXES NEEDED (2 HOURS MAX)
 
 ```rust
-// Main lottery functions
-pub fn enter_lottery(player: Address, amount: i128) -> Result<()>
-pub fn pick_winner() -> Address  // Called when timer ends
-pub fn get_current_round() -> RoundInfo
-pub fn claim_refund() -> Result<()>  // For losers
+// 1. Fix MockUSDC - Add these functions
+pub fn approve(env: Env, from: Address, spender: Address, amount: i128)
+pub fn transfer_from(env: Env, spender: Address, from: Address, to: Address, amount: i128)
 
-// Halloween special features
-pub fn trick_or_treat() -> Bonus  // Random small prizes
-pub fn costume_bonus(player: Address) -> u32  // Extra tickets
+// 2. Remove or fix trick_or_treat
+// CURRENT: Drains contract funds
+// FIX: Just remove it or make it cosmetic only
 ```
+````
 
-### Key Constants
+## 🎯 FEATURE SET - LOCKED IN
 
-```rust
-const MIN_DEPOSIT: i128 = 100_0000000;  // 100 USDC
-const ROUND_DURATION: u64 = 604800;     // 1 week (10 mins for demo)
-const YIELD_RATE: u32 = 1000;           // 10% APY (mocked)
-const HALLOWEEN_MULTIPLIER: u32 = 2;     // Double prizes on Halloween
-```
+### 1. Three Pool Sizes (Deploy same contract 3x)
 
-## Frontend Components
+- Small Pool: 10+ USDC minimum
+- Medium Pool: 100+ USDC minimum
+- Whale Pool: 500+ USDC minimum
 
-### Halloween Theme Colors
-
-```css
---blood-red: #8B0000
---pumpkin-orange: #FF7518
---ghost-white: #F8F8FF
---witch-purple: #4B0082
---midnight-black: #0C0C0C
---slime-green: #39FF14
---fog-gray: #2F4F4F
-```
-
-### Required Animations
-
-1. **Cauldron Bubble**: Prize pool bubbles as it grows
-2. **Ghost Float**: Players float as ghosts
-3. **Pumpkin Spin**: Winner selection spinning pumpkin
-4. **Bat Swarm**: Confetti replaced with flying bats
-5. **Skeleton Dance**: Loading animation
-
-### Sound Effects
-
-- Enter lottery: "witch_laugh.mp3"
-- Winner selected: "thunder_crash.mp3"
-- Countdown tick: "heartbeat.mp3"
-- New round: "wolf_howl.mp3"
-
-## Game Features Priority
-
-### MUST HAVE (Core Game Loop)
-
-✅ Enter with USDC
-✅ Show prize pool with cauldron animation
-✅ Spooky countdown timer
-✅ Pick winner with pumpkin wheel
-✅ Auto-refund losers
-✅ Halloween theme throughout
-
-### SHOULD HAVE (Halloween Features)
-
-🎃 Trick-or-treat mini-game (instant small prizes)
-🎃 Costume avatars (ghost, witch, vampire, zombie)
-🎃 Special Halloween round (2x prizes)
-🎃 Spooky sound effects
-🎃 Fog animation on background
-
-### NICE TO HAVE
-
-👻 Achievement badges (First Blood, Soul Survivor)
-👻 Haunted leaderboard
-👻 Prediction side-game
-👻 Referral system ("Summon Friends")
-
-## Code Templates
-
-### React Component Template
+### 2. Ghost Name Generator (Frontend Only)
 
 ```typescript
-"use client";
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { useContract } from "@/hooks/useContract";
-
-export default function SpookyComponent() {
-  const { contract } = useContract();
-  const [isHaunted, setIsHaunted] = useState(false);
-
-  return (
-    <motion.div
-      className="bg-midnight-black border-2 border-pumpkin-orange rounded-lg p-6"
-      whileHover={{ scale: 1.05 }}
-      animate={{
-        boxShadow: isHaunted ? "0 0 50px #FF7518" : "0 0 10px #4B0082",
-      }}
-    >
-      {/* Spooky content */}
-    </motion.div>
-  );
+function getGhostName(address: string): string {
+  const prefixes = ["Spooky", "Haunted", "Phantom", "Cursed"];
+  const names = ["Vampire", "Banshee", "Wraith", "Poltergeist"];
+  const seed = parseInt(address.slice(-8), 16);
+  return `${prefixes[seed % 4]} ${names[(seed >> 4) % 4]}`;
 }
 ```
 
-### Contract Interaction
-
-```typescript
-// Always use these patterns for contract calls
-async function enterLottery(amount: number) {
-  try {
-    showSkeletonLoader();
-    playSound("witch_laugh");
-
-    const tx = await contract.enter_lottery({
-      player: publicKey,
-      amount: BigInt(amount * 10000000),
-    });
-
-    showBatConfetti();
-    return tx;
-  } catch (error) {
-    showGhostError(error);
-  }
-}
-```
-
-## Testing Approach
-
-### Demo Scenario Setup
-
-```javascript
-// Pre-populate for impressive demo
-const DEMO_STATE = {
-  currentRound: {
-    prizePool: 666, // Spooky number
-    players: 13, // Unlucky number
-    timeLeft: 120, // 2 minutes for live demo
-  },
-  players: [
-    { name: "Vampire", deposit: 500, costume: "🧛" },
-    { name: "Witch", deposit: 200, costume: "🧙‍♀️" },
-    { name: "Ghost", deposit: 100, costume: "👻" },
-    { name: "Zombie", deposit: 300, costume: "🧟" },
-  ],
-};
-```
-
-## Common Issues & Solutions
-
-### Issue: Randomness for winner selection
+### 3. Achievement Badges (Simple Tracking)
 
 ```rust
-// Use block timestamp + transaction hash (sufficient for hackathon)
-let seed = env.ledger().timestamp() ^ env.ledger().sequence();
-let winner_index = (seed % players.len()) as u32;
+// Track in contract or frontend:
+- 🎃 Fresh Soul (first entry)
+- 👻 Lucky Ghost (won once)
+- 🦇 Night Creature (Halloween player)
+- 🐋 Big Spender (500+ USDC entry)
 ```
 
-### Issue: No real yield source
+## 📋 ACTION PLAN - NEXT 20 HOURS
 
-```rust
-// Mock yield calculation for demo
-let mock_yield = (total_deposits * YIELD_RATE * duration) / (365 * 24 * 60 * 60 * 10000);
-```
-
-### Issue: Halloween theme too complex
-
-Focus on color scheme + sound effects. Skip complex animations if running out of time.
-
-## Deployment Commands
+### Phase 1: Contract Fixes (Hours 0-2)
 
 ```bash
-# Deploy to testnet
-stellar contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/lottery_pool.wasm \
-  --network testnet \
-  --source $SECRET_KEY
-
-# Initialize with Halloween params
-stellar contract invoke \
-  --id $CONTRACT_ID \
-  --network testnet \
-  -- initialize \
-  --usdc_token $USDC_ADDRESS \
-  --yield_rate 1000 \
-  --round_duration 600 \
-  --min_deposit 100000000
+[ ] Fix MockUSDC approve/transfer_from
+[ ] Remove/disable trick_or_treat
+[ ] Deploy 3 pool contracts to testnet
+[ ] Test full flow with Freighter
 ```
 
-## Demo Talking Points
+### Phase 2: Frontend Core (Hours 2-8)
 
-1. "Nobody loses money - everyone gets refunded!"
-2. "Halloween special: Double prizes this week!"
-3. "Look at the spooky animations - gaming meets DeFi!"
-4. "Built on Stellar for instant, cheap transactions"
-5. "Watch the cauldron bubble as the prize grows!"
+```bash
+[ ] Setup Next.js with Stellar SDK
+[ ] Connect Freighter wallet
+[ ] Build PoolSelector.tsx (3 cauldrons)
+[ ] Build EnterLottery.tsx form
+[ ] Display current round data
+[ ] Implement ghost name generator
+```
 
-## Time Management
+### Phase 3: UI Polish (Hours 8-14)
 
-- Hour 0-8: Smart contracts (must work!)
-- Hour 8-16: Frontend with Halloween theme
-- Hour 16-20: Animations and polish
-- Hour 20-22: Demo preparation
-- Hour 22-24: Buffer for issues
+```bash
+[ ] Halloween color scheme (orange/purple/black)
+[ ] Bubbling cauldron animation
+[ ] Countdown timer with pulse
+[ ] Player list with ghost names
+[ ] Achievement badge display
+[ ] Sound effects (optional)
+```
 
-## Critical Reminders
+### Phase 4: Demo Prep (Hours 14-18)
 
-- ALWAYS test winner selection before demo
-- Have backup video of working game
-- Pre-fund demo wallets
-- Halloween theme is BONUS - core game must work first
-- Sound effects on MUTE by default (let user enable)
-- Mobile responsive is NOT required for hackathon
+```bash
+[ ] Pre-populate pools with players
+[ ] Fund demo wallets
+[ ] Practice 2-minute demo flow
+[ ] Record backup video
+[ ] Prepare slides (Canva)
+```
 
-## Git Commit Style
+### Phase 5: Buffer (Hours 18-20)
 
-Use spooky commit messages for fun:
+```bash
+[ ] Fix any critical bugs
+[ ] Final demo practice
+[ ] Deploy fresh for demo
+```
 
-- "🎃 Add pumpkin wheel animation"
-- "👻 Summon wallet connection"
-- "🧙‍♀️ Cast lottery entry spell"
-- "⚰️ Bury bugs in winner selection"
-- "🦇 Release bat confetti swarm"
+## 🎮 DEMO FLOW (2 MINUTES)
+
+```
+0:00 - "A lottery where NOBODY loses money"
+0:15 - Show 3 pools with different sizes
+0:30 - Connect wallet, enter Medium pool
+0:45 - Show as "Phantom Vampire" with Fresh Soul badge
+1:00 - Trigger winner selection
+1:15 - Show winner gets yield, losers get refunds
+1:30 - "Built on Stellar: instant, cheap, fair"
+1:45 - "Gamified DeFi for mainstream adoption"
+2:00 - Questions
+```
+
+## 💻 FRONTEND STRUCTURE
+
+```typescript
+app/
+├── page.tsx                    // Main lottery page
+├── layout.tsx                  // Halloween theme wrapper
+components/
+├── PoolSelector.tsx           // 3 cauldron selection
+├── EnterLotteryForm.tsx       // USDC amount input
+├── PlayersList.tsx            // Ghost names + amounts
+├── CountdownTimer.tsx         // Time until round end
+├── WinnerDisplay.tsx          // Winner announcement
+├── AchievementBadges.tsx      // Player badges
+└── GhostNameGenerator.tsx     // Address to ghost name
+```
+
+## 🚫 DO NOT ADD
+
+- Prediction markets
+- Complex oracle systems
+- NFT rewards
+- Multiple round types
+- Voting mechanisms
+- Token launches
+- AMM/DEX features
+
+## 🎯 WINNING CRITERIA ALIGNMENT
+
+Track 2 Requirements:
+✅ Smart contracts deployed - 3 pool contracts
+✅ Working demo - Live entry and winner selection
+✅ On-chain game - Lottery with rounds
+✅ Multiplayer - Multiple players compete
+✅ Halloween themed - Ghost names, spooky UI
+
+## 🔥 KEY TALKING POINTS
+
+1. "First no-loss lottery on any blockchain"
+2. "Three pools democratize access"
+3. "Gamification makes DeFi fun"
+4. "Built on Stellar for 5-second finality"
+5. "Sustainable yield, not ponzi"
+
+## 🛠 TECHNICAL CONSTANTS
+
+```typescript
+// Stellar
+const STROOPS = 10_000_000; // 1 USDC = 10^7 stroops
+const TESTNET_HORIZON = "https://horizon-testnet.stellar.org";
+const TESTNET_SOROBAN = "https://soroban-testnet.stellar.org";
+
+// Pools
+const SMALL_MIN = 10 * STROOPS;
+const MEDIUM_MIN = 100 * STROOPS;
+const WHALE_MIN = 500 * STROOPS;
+
+// Demo
+const ROUND_DURATION = 120; // 2 minutes for demo
+const MOCK_YIELD_RATE = 1000; // 10% APY
+```
+
+## ⚡ QUICK DECISIONS
+
+- Bug found? Skip feature, fix bug
+- Animation complex? Use simple CSS
+- Sound not working? Skip it
+- Contract issue? Use mock data for demo
+- Time pressure? Core game > fancy features
+
+## 📝 COMMIT MESSAGE STYLE
+
+```bash
+git commit -m "🎃 Add pool selector component"
+git commit -m "👻 Implement ghost name generator"
+git commit -m "🦇 Deploy three pool contracts"
+git commit -m "⚰️ Fix USDC approval bug"
+```
+
+## 🚨 REMEMBER
+
+1. NO NEW FEATURES after contract deployment
+2. Halloween theme is BONUS - game must work
+3. Test demo flow 10 times minimum
+4. Have backup video ready
+5. Judges want to see it WORK, not hear promises
+
+## CURRENT PRIORITY: Deploy contracts to testnet NOW
+
+Stop planning. Start shipping. You have 20 hours.
 
 ````
 
----
+## Your Next 4 Hours - Step by Step
 
-## 📋 **2. Project Writeup (For Claude Context)**
+### Hour 1: Fix Contracts
+```bash
+# 1. Add to mock_usdc/src/lib.rs:
+- approve() function
+- transfer_from() function
+- allowance tracking
 
-```markdown
-# StellarLotto - Halloween No-Loss Lottery Game
-## EasyA x Stellar Harvard Hack-o-Ween Hackathon Project
-
-### Quick Summary
-I'm building **StellarLotto**, a Halloween-themed lottery game where players CANNOT lose money. It's like PoolTogether but with spooky vibes for the Hack-o-Ween hackathon (Oct 25-26, 2025, Track 2: Smart Contract Games).
-
-### Core Concept
-- Players deposit USDC to enter weekly lottery
-- Pool earns yield (mocked at 10% APY for demo)
-- One winner takes ALL the yield
-- Everyone else gets their original deposit back
-- Nobody loses money!
-- Halloween theme with spooky animations
-
-### Why This Wins
-1. **Simple enough** to build in 24 hours
-2. **Game mechanics** clear for Track 2 (lottery, winners, rewards)
-3. **Live demo magic** - judges can enter and win
-4. **Halloween perfect** - themed for Hack-o-Ween
-5. **Revolutionary concept** - first no-loss lottery
-
-### Technical Implementation
-- **Smart Contracts**: Rust with Soroban SDK on Stellar testnet
-- **Frontend**: Next.js 14, TypeScript, Tailwind CSS, Framer Motion
-- **Wallet**: Freighter browser extension
-- **Key Innovation**: No-loss mechanism with guaranteed refunds
-
-### Core Features (MVP)
-1. Enter lottery with USDC (min 100 USDC)
-2. Prize pool display (animated cauldron)
-3. Countdown timer (spooky themed)
-4. Winner selection (spinning pumpkin wheel)
-5. Automatic refunds for non-winners
-6. Halloween animations and sound effects
-
-### Smart Contract Functions
-```rust
-enter_lottery(player, amount) // Join current round
-pick_winner() // Select random winner when round ends
-get_current_round() // View active round info
-claim_refund() // Losers get money back
+# 2. In lottery_pool/src/lib.rs:
+- Comment out trick_or_treat function
 ````
 
-### Game Loop
+### Hour 2: Deploy Everything
 
-1. **ENTER**: Deposit 100+ USDC
-2. **WAIT**: Pool earns yield for 1 week (10 mins for demo)
-3. **WIN**: Random selection at round end
-4. **RESULT**: Winner gets deposit + ALL yield, others get deposit back
-5. **REPEAT**: New round starts automatically
+```bash
+# Deploy MockUSDC
+stellar contract deploy --wasm mock_usdc.wasm
 
-### Halloween Theme Elements
+# Deploy 3 lottery pools
+stellar contract deploy --wasm lottery_pool.wasm # Small
+stellar contract deploy --wasm lottery_pool.wasm # Medium
+stellar contract deploy --wasm lottery_pool.wasm # Whale
 
-- Color scheme: Orange, purple, black, green
-- Animations: Floating ghosts, bubbling cauldron, flying bats
-- Sound effects: Witch laughs, thunder, wolf howls
-- Player avatars: Vampire, witch, ghost, zombie costumes
-- Special: Halloween round with 2x prizes
-
-### Demo Strategy
-
-1. Pre-populate with 13 players (spooky number)
-2. Show $666 prize pool (Halloween number)
-3. Live entry during presentation
-4. 2-minute countdown for excitement
-5. Winner selection with pumpkin wheel
-6. Show refunds happening live
-
-### Technical Challenges & Solutions
-
-- **Randomness**: Using block timestamp + tx hash (sufficient for demo)
-- **Yield Source**: Mocking 10% APY returns
-- **Time Constraint**: Focus on core loop, Halloween theme is bonus
-- **Live Demo Risk**: Pre-recorded backup video ready
-
-### File Structure
-
-```
-stellar-lotto/
-├── contracts/          # Rust smart contracts
-├── frontend/          # Next.js Halloween UI
-└── scripts/           # Deployment and demo setup
+# Initialize each with different minimums
 ```
 
-### Current Status
+### Hour 3-4: Basic Frontend
 
-- [ ] Smart contracts (lottery logic)
-- [ ] Frontend (Halloween themed UI)
-- [ ] Animations (spooky effects)
-- [ ] Demo preparation
+```bash
+# Just get SOMETHING showing
+npx create-next-app@latest stellar-lotto-ui
+npm install @stellar/stellar-sdk
+npm install @stellar/freighter-api
 
-### Hackathon Details
-
-- **Event**: EasyA x Stellar Harvard Hack-o-Ween
-- **Track**: Track 2 - Smart Contract Games
-- **Duration**: 36 hours (Oct 25-26, 2025)
-- **Location**: Boston
-- **Prize Pool**: $6,666 for first place
-
-### Why Track 2 (Not Track 1)
-
-- It's literally a GAME (lottery)
-- Has game mechanics (rounds, winners, rewards)
-- Competitive multiplayer elements
-- Not just DeFi infrastructure
-
-### Help Needed From Claude
-
-When starting new chat, I need help with:
-
-1. Smart contract implementation in Rust/Soroban
-2. Frontend Halloween animations
-3. Demo script refinement
-4. Bug fixes and optimization
-5. Presentation preparation
-
-### Key Links
-
-- Stellar Testnet: https://horizon-testnet.stellar.org
-- Soroban Docs: https://soroban.stellar.org
-- Freighter Wallet: https://www.freighter.app
-
-### Remember
-
-- Halloween theme is BONUS - core game must work first
-- 24-hour time limit - no complex features
-- Focus on working demo over perfect code
-- Judges want to see live gameplay
-- Pre-record backup demo video
-
-```
-
+# Create one component that:
+- Connects wallet
+- Shows pool data
+- Allows entry
 ```

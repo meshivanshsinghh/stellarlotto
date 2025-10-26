@@ -478,29 +478,29 @@ impl LotteryPool {
         );
     }
 
-    // FIXED: trick_or_treat now actually pays out USDC!
-    pub fn trick_or_treat(env: Env, player: Address) -> i128 {
-        player.require_auth();
+    // // FIXED: trick_or_treat now actually pays out USDC!
+    // pub fn trick_or_treat(env: Env, player: Address) -> i128 {
+    //     player.require_auth();
 
-        env.storage()
-            .instance()
-            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+    //     env.storage()
+    //         .instance()
+    //         .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 
-        // Simple random prize between 1-10 USDC (in stroops: 7 decimals)
-        let seed = env.ledger().timestamp() ^ (env.ledger().sequence() as u64);
-        let prize = ((seed % 10) + 1) as i128 * 10_000_000; // 1-10 USDC
+    //     // Simple random prize between 1-10 USDC (in stroops: 7 decimals)
+    //     let seed = env.ledger().timestamp() ^ (env.ledger().sequence() as u64);
+    //     let prize = ((seed % 10) + 1) as i128 * 10_000_000; // 1-10 USDC
 
-        // ACTUALLY PAY THE PRIZE
-        let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
-        let token_client = token::Client::new(&env, &usdc_token);
-        token_client.transfer(&env.current_contract_address(), &player, &prize);
+    //     // ACTUALLY PAY THE PRIZE
+    //     let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
+    //     let token_client = token::Client::new(&env, &usdc_token);
+    //     token_client.transfer(&env.current_contract_address(), &player, &prize);
 
-        // Emit event
-        env.events()
-            .publish((symbol_short!("treat"), player.clone()), prize);
+    //     // Emit event
+    //     env.events()
+    //         .publish((symbol_short!("treat"), player.clone()), prize);
 
-        prize
-    }
+    //     prize
+    // }
 
     // NEW: Get global statistics
     pub fn get_stats(env: Env) -> GlobalStats {

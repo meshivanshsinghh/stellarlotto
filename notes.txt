@@ -1,0 +1,18 @@
+MOCKUSDC contract deployed with id: CD2HXFPCAAHQOZNOQQATXGYRBQGEIOXNBKUGZOQFQD7HSBXEP6FBEQN5
+initializing mockusd contract on chain with signing id: 3b6fc12ef3a1a726b66cc636d1d97eb52ad5c6a00f6b09b9533c14c5302e2669
+
+
+
+initializing small pool with signing id: a746136ef528318396d79a33387ba065e3e6ae1e7cc14352a91aa808048dbec7
+initializing medium pool with signing id: e90f415509a33168f289a4709eb9d4c440b90d2734dbdc8e3d820f2a82890fd0
+initializing medium pool with signing id: 330e43f71cdac967b8923792a6faa7fa560a176352eef42f43a2cbb641a3d7e3
+
+
+minting 50 usdc to player 1 with signing id: eaa79f6d3534604623e701742f4c66c3cd1c1483cd5dc97d55b7eb4cb185f601
+minting 200 usdc to player 2 with signing id: 88792afdea28140e55840c49eef0b95005538748c7814741805a91829e6fdbbb
+minting 150 usdc to player 3 with signing id: 9b8b26a78d0129954bc8e8086e9f57d6b73aecf136e17e41021d7377dbb5ce66
+minting 2000 usdc to whale with signing id: 4c0a0e72de22ea9e785dfb2ad049b1e4f03b59cd7a7daa580d948456c08e80c2
+
+blend <- borrowing/lending on stellar
+defindex <- builds on top of blend 
+
