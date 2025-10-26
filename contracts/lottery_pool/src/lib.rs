@@ -356,14 +356,18 @@ impl LotteryPool {
         }
 
         // Calculate real yield from Blend
-        // Step 1: Check balance before withdrawal (includes house money)
+        // Step 1: Check balance before withdrawal (house money only)
         let balance_before: i128 = env.invoke_contract(
             &usdc_token,
             &Symbol::new(&env, "balance"),
             (env.current_contract_address(),).into_val(&env),
         );
 
-        // Step 2: Authorize withdrawal (Blend will transfer USDC back to lottery)
+        // Step 2: Calculate actual Blend amount (accounting for fees)
+        // Blend charges ~0.002% in fees, so we have slightly less than deposited
+        let actual_blend_amount = round.total_deposits * 9999 / 10000; // 99.99%
+
+        // Authorize withdrawal
         env.authorize_as_current_contract(vec![
             &env,
             InvokerContractAuthEntry::Contract(SubContractInvocation {
@@ -373,7 +377,7 @@ impl LotteryPool {
                     args: (
                         blend_pool.clone(),
                         env.current_contract_address(),
-                        round.total_deposits,
+                        actual_blend_amount, // Withdraw adjusted amount
                     )
                         .into_val(&env),
                 },
@@ -385,7 +389,7 @@ impl LotteryPool {
         let withdraw_request = Request {
             request_type: 3, // WithdrawCollateral = 3
             address: usdc_token.clone(),
-            amount: round.total_deposits,
+            amount: actual_blend_amount, // Use adjusted amount
         };
 
         let requests = Vec::from_array(&env, [withdraw_request]);
@@ -410,18 +414,11 @@ impl LotteryPool {
             (env.current_contract_address(),).into_val(&env),
         );
 
-        // Calculate yield safely
-        // balance_after = house_money + withdrawn_from_blend
-        // available_for_yield = total_balance - deposits_to_refund
-        let available_for_yield = balance_after - round.total_deposits;
-
-        // Use conservative yield: 50% of available (keeps house money for future rounds)
-        // This ensures we always have enough for payouts
-        let total_yield = if available_for_yield > 0 {
-            available_for_yield / 20 // 50% of available becomes yield
-        } else {
-            0 // Safety: no yield if somehow we're short
-        };
+        // Calculate yield from HOUSE MONEY only
+        // Blend fees are absorbed by player corpus (they get slightly less on refund)
+        // Yield comes purely from house money
+        let house_money = balance_before;
+        let total_yield = house_money / 20; // 5% of house money
 
         round.total_yield = total_yield;
 
@@ -429,7 +426,7 @@ impl LotteryPool {
         if players.len() < 3 {
             round.is_active = false;
 
-            // Refund all players
+            // Refund all players (they pay proportional Blend fees)
             for player in players.iter() {
                 let entry: PlayerEntry = env
                     .storage()
@@ -437,10 +434,13 @@ impl LotteryPool {
                     .get(&DataKey::PlayerDeposit(current_round_id, player.clone()))
                     .unwrap();
 
+                // Refund proportional to what was withdrawn from Blend
+                let player_refund = entry.deposit * actual_blend_amount / round.total_deposits;
+
                 env.invoke_contract::<()>(
                     &usdc_token,
                     &Symbol::new(&env, "transfer"),
-                    (env.current_contract_address(), player, entry.deposit).into_val(&env),
+                    (env.current_contract_address(), player, player_refund).into_val(&env),
                 );
             }
 
@@ -498,7 +498,7 @@ impl LotteryPool {
             .get(&DataKey::PlayerDeposit(current_round_id, winner.clone()))
             .unwrap();
 
-        // Transfer prize (original deposit + yield)
+        // Transfer prize (original deposit + yield from house money)
         let prize = winner_entry.deposit + total_yield;
 
         env.invoke_contract::<()>(

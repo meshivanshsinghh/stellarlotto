@@ -51,38 +51,38 @@ echo ""
 # ============================================
 # PHASE 1: MINT USDC TO PLAYERS
 # ============================================
-echo "Minting USDC to test players..."
-echo ""
+# echo "Minting USDC to test players..."
+# echo ""
 
-echo "Minting 500 USDC to player1..."
-stellar contract invoke \
-  --id $BLEND_USDC_ID \
-  --source $ADMIN_KEY \
-  --network $NETWORK \
-  -- mint \
-  --to $(stellar keys address $PLAYER1_KEY) \
-  --amount $PLAYER1_MINT
+# echo "Minting 500 USDC to player1..."
+# stellar contract invoke \
+#   --id $BLEND_USDC_ID \
+#   --source $ADMIN_KEY \
+#   --network $NETWORK \
+#   -- mint \
+#   --to $(stellar keys address $PLAYER1_KEY) \
+#   --amount $PLAYER1_MINT
 
-echo "Minting 1500 USDC to player2..."
-stellar contract invoke \
-  --id $BLEND_USDC_ID \
-  --source $ADMIN_KEY \
-  --network $NETWORK \
-  -- mint \
-  --to $(stellar keys address $PLAYER2_KEY) \
-  --amount $PLAYER2_MINT
+# echo "Minting 1500 USDC to player2..."
+# stellar contract invoke \
+#   --id $BLEND_USDC_ID \
+#   --source $ADMIN_KEY \
+#   --network $NETWORK \
+#   -- mint \
+#   --to $(stellar keys address $PLAYER2_KEY) \
+#   --amount $PLAYER2_MINT
 
-echo "Minting 1000 USDC to player3..."
-stellar contract invoke \
-  --id $BLEND_USDC_ID \
-  --source $ADMIN_KEY \
-  --network $NETWORK \
-  -- mint \
-  --to $(stellar keys address $PLAYER3_KEY) \
-  --amount $PLAYER3_MINT
+# echo "Minting 1000 USDC to player3..."
+# stellar contract invoke \
+#   --id $BLEND_USDC_ID \
+#   --source $ADMIN_KEY \
+#   --network $NETWORK \
+#   -- mint \
+#   --to $(stellar keys address $PLAYER3_KEY) \
+#   --amount $PLAYER3_MINT
 
-echo "✓ All players funded with USDC"
-echo ""
+# echo "✓ All players funded with USDC"
+# echo ""
 
 # ============================================
 # PHASE 2: VERIFY BALANCES
