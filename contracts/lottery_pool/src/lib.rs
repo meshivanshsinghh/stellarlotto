@@ -1,5 +1,7 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, token, Address, Env, Vec};
+use soroban_sdk::token::Client as TokenClient;
+use soroban_sdk::InvokeError;
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, Vec};
 
 // Constants
 const INSTANCE_LIFETIME_THRESHOLD: u32 = 518400; // ~60 days
@@ -176,8 +178,13 @@ impl LotteryPool {
             panic!("Player already entered this round");
         }
 
-        let token_client = token::Client::new(&env, &usdc_token);
-        token_client.transfer(&player, &env.current_contract_address(), &amount);
+        let token_client = TokenClient::new(&env, &usdc_token);
+        token_client.transfer_from(
+            &env.current_contract_address(),
+            &player,
+            &env.current_contract_address(),
+            &amount,
+        );
 
         let player_entry = PlayerEntry {
             player: player.clone(),
@@ -308,7 +315,7 @@ impl LotteryPool {
 
             // Refund all players their deposits
             let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
-            let token_client = token::Client::new(&env, &usdc_token);
+            let token_client = TokenClient::new(&env, &usdc_token);
 
             for player in players.iter() {
                 let entry: PlayerEntry = env
@@ -374,7 +381,7 @@ impl LotteryPool {
         // Transfer prize (original deposit + all yield)
         let prize = winner_entry.deposit + mock_yield;
         let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
-        let token_client = token::Client::new(&env, &usdc_token);
+        let token_client = TokenClient::new(&env, &usdc_token);
         token_client.transfer(&env.current_contract_address(), &winner, &prize);
 
         // Update round
@@ -460,7 +467,7 @@ impl LotteryPool {
 
         // Transfer refund
         let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
-        let token_client = token::Client::new(&env, &usdc_token);
+        let token_client = TokenClient::new(&env, &usdc_token);
         token_client.transfer(
             &env.current_contract_address(),
             &player,
@@ -492,7 +499,7 @@ impl LotteryPool {
 
     //     // ACTUALLY PAY THE PRIZE
     //     let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
-    //     let token_client = token::Client::new(&env, &usdc_token);
+    //     let token_client = TokenClient::new(&env, &usdc_token);
     //     token_client.transfer(&env.current_contract_address(), &player, &prize);
 
     //     // Emit event

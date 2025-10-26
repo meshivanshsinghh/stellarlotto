@@ -1,4 +1,3 @@
-// contracts/mock_usdc/src/lib.rs
 #![no_std]
 use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, String};
 
@@ -42,11 +41,11 @@ impl MockUSDC {
         from.require_auth();
 
         let from_balance = Self::balance(env.clone(), from.clone());
-        let to_balance = Self::balance(env.clone(), to.clone());
-
         if from_balance < amount {
             panic!("Insufficient balance");
         }
+
+        let to_balance = Self::balance(env.clone(), to.clone());
 
         env.storage()
             .instance()
@@ -55,12 +54,19 @@ impl MockUSDC {
             .instance()
             .set(&DataKey::Balance(to.clone()), &(to_balance + amount));
 
-        env.events()
-            .publish((symbol_short!("transfer"), from, to), amount);
+        env.events().publish(
+            (symbol_short!("transfer"), from.clone(), to.clone()),
+            amount,
+        );
     }
 
-    // NEW: Approve function for allowances
-    pub fn approve(env: Env, from: Address, spender: Address, amount: i128) {
+    pub fn approve(
+        env: Env,
+        from: Address,
+        spender: Address,
+        amount: i128,
+        _expiration_ledger: u32,
+    ) {
         from.require_auth();
 
         if amount < 0 {
@@ -75,23 +81,19 @@ impl MockUSDC {
             .publish((symbol_short!("approve"), from, spender), amount);
     }
 
-    // NEW: Transfer from function using allowances
     pub fn transfer_from(env: Env, spender: Address, from: Address, to: Address, amount: i128) {
         spender.require_auth();
 
-        // Check allowance
         let allowance = Self::allowance(env.clone(), from.clone(), spender.clone());
         if allowance < amount {
             panic!("Insufficient allowance");
         }
 
-        // Check balance
         let from_balance = Self::balance(env.clone(), from.clone());
         if from_balance < amount {
             panic!("Insufficient balance");
         }
 
-        // Update balances
         let to_balance = Self::balance(env.clone(), to.clone());
         env.storage()
             .instance()
@@ -100,7 +102,6 @@ impl MockUSDC {
             .instance()
             .set(&DataKey::Balance(to.clone()), &(to_balance + amount));
 
-        // Update allowance
         env.storage().instance().set(
             &DataKey::Allowance(from.clone(), spender.clone()),
             &(allowance - amount),
@@ -110,7 +111,6 @@ impl MockUSDC {
             .publish((symbol_short!("transfer"), from, to), amount);
     }
 
-    // NEW: Get allowance
     pub fn allowance(env: Env, from: Address, spender: Address) -> i128 {
         env.storage()
             .instance()
@@ -126,7 +126,7 @@ impl MockUSDC {
     }
 
     pub fn decimals(_env: Env) -> u32 {
-        7 // Standard for Stellar
+        7
     }
 
     pub fn name(_env: Env) -> String {
