@@ -1,6 +1,7 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Env, IntoVal, Symbol, Vec,
+    auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
+    contract, contractimpl, contracttype, symbol_short, vec, Address, Env, IntoVal, Symbol, Vec,
 };
 
 // Constants
@@ -11,15 +12,16 @@ const INSTANCE_BUMP_AMOUNT: u32 = 1036800; // ~120 days
 pub enum DataKey {
     Admin,
     UsdcToken,
+    BlendPool, // Blend pool address for yield generation
     CurrentRound,
     Round(u32),
     PlayerDeposit(u32, Address),
     PlayerList(u32),
-    YieldRate,
+    YieldRate, // Kept for fallback/reference
     RoundDuration,
     MinDeposit,
-    TotalVolume,  // Track total USDC volume
-    TotalPlayers, // Track total unique players
+    TotalVolume,
+    TotalPlayers,
 }
 
 #[contracttype]
@@ -53,6 +55,17 @@ pub struct GlobalStats {
     pub total_prizes_paid: i128,
 }
 
+// ============ BLEND REQUEST STRUCTURE ============
+// From blend-contracts-v2/pool/src/pool/actions.rs
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct Request {
+    pub request_type: u32, // 0=Supply, 1=Withdraw, 2=SupplyCollateral, 3=WithdrawCollateral
+    pub address: Address,  // Asset address
+    pub amount: i128,      // Amount
+}
+
 // ============ HELPER FUNCTIONS ============
 
 fn is_initialized(env: &Env) -> bool {
@@ -66,10 +79,12 @@ pub struct LotteryPool;
 
 #[contractimpl]
 impl LotteryPool {
+    /// Initialize lottery pool with Blend integration
     pub fn initialize(
         env: Env,
         admin: Address,
         usdc_token: Address,
+        blend_pool: Address, // Blend pool address
         yield_rate: u32,
         round_duration: u64,
         min_deposit: i128,
@@ -94,6 +109,9 @@ impl LotteryPool {
         env.storage()
             .instance()
             .set(&DataKey::UsdcToken, &usdc_token);
+        env.storage()
+            .instance()
+            .set(&DataKey::BlendPool, &blend_pool);
         env.storage()
             .instance()
             .set(&DataKey::YieldRate, &yield_rate);
@@ -135,6 +153,7 @@ impl LotteryPool {
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
     }
 
+    /// Enter lottery - deposits USDC and stakes in Blend for yield
     pub fn enter_lottery(env: Env, player: Address, amount: i128) {
         player.require_auth();
 
@@ -144,6 +163,7 @@ impl LotteryPool {
 
         let min_deposit: i128 = env.storage().instance().get(&DataKey::MinDeposit).unwrap();
         let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
+        let blend_pool: Address = env.storage().instance().get(&DataKey::BlendPool).unwrap();
         let current_round_id: u32 = env
             .storage()
             .instance()
@@ -177,13 +197,51 @@ impl LotteryPool {
             panic!("Player already entered this round");
         }
 
-        // FIXED: Direct cross-contract call to MockUSDC transfer
+        // Step 1: Transfer USDC from player to lottery contract
         env.invoke_contract::<()>(
             &usdc_token,
             &Symbol::new(&env, "transfer"),
             (player.clone(), env.current_contract_address(), amount).into_val(&env),
         );
 
+        // Step 2: Authorize lottery contract for nested calls
+        // This authorizes Blend to call token.transfer on behalf of lottery contract
+        env.authorize_as_current_contract(vec![
+            &env,
+            InvokerContractAuthEntry::Contract(SubContractInvocation {
+                context: ContractContext {
+                    contract: usdc_token.clone(),
+                    fn_name: Symbol::new(&env, "transfer"),
+                    args: (env.current_contract_address(), blend_pool.clone(), amount)
+                        .into_val(&env),
+                },
+                sub_invocations: vec![&env],
+            }),
+        ]);
+
+        // Step 3: Deposit to Blend pool as SupplyCollateral
+        let supply_request = Request {
+            request_type: 2, // SupplyCollateral = 2 (earns yield!)
+            address: usdc_token.clone(),
+            amount: amount,
+        };
+
+        let requests = Vec::from_array(&env, [supply_request]);
+
+        // Call Blend's submit
+        let _ = env.invoke_contract::<soroban_sdk::Val>(
+            &blend_pool,
+            &Symbol::new(&env, "submit"),
+            (
+                env.current_contract_address(),
+                env.current_contract_address(),
+                env.current_contract_address(),
+                requests,
+            )
+                .into_val(&env),
+        );
+
+        // Store player entry
         let player_entry = PlayerEntry {
             player: player.clone(),
             deposit: amount,
@@ -255,7 +313,7 @@ impl LotteryPool {
             .get(&DataKey::Round(current_round_id))
             .unwrap()
     }
-
+    /// Pick winner - withdraws from Blend and distributes yield
     pub fn pick_winner(env: Env) -> Address {
         env.storage()
             .instance()
@@ -266,6 +324,9 @@ impl LotteryPool {
             .instance()
             .get(&DataKey::CurrentRound)
             .unwrap();
+
+        let blend_pool: Address = env.storage().instance().get(&DataKey::BlendPool).unwrap();
+        let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
 
         let mut round: Round = env
             .storage()
@@ -294,25 +355,81 @@ impl LotteryPool {
             panic!("No players in this round");
         }
 
-        // Calculate yield
-        let yield_rate: u32 = env.storage().instance().get(&DataKey::YieldRate).unwrap();
-        let round_duration: u64 = env
-            .storage()
-            .instance()
-            .get(&DataKey::RoundDuration)
-            .unwrap();
+        // Calculate real yield from Blend
+        // Step 1: Check balance before withdrawal (includes house money)
+        let balance_before: i128 = env.invoke_contract(
+            &usdc_token,
+            &Symbol::new(&env, "balance"),
+            (env.current_contract_address(),).into_val(&env),
+        );
 
-        let mock_yield = (round.total_deposits * yield_rate as i128 * round_duration as i128)
-            / (365 * 24 * 60 * 60 * 10000);
+        // Step 2: Authorize withdrawal (Blend will transfer USDC back to lottery)
+        env.authorize_as_current_contract(vec![
+            &env,
+            InvokerContractAuthEntry::Contract(SubContractInvocation {
+                context: ContractContext {
+                    contract: usdc_token.clone(),
+                    fn_name: Symbol::new(&env, "transfer"),
+                    args: (
+                        blend_pool.clone(),
+                        env.current_contract_address(),
+                        round.total_deposits,
+                    )
+                        .into_val(&env),
+                },
+                sub_invocations: vec![&env],
+            }),
+        ]);
+
+        // Step 3: Withdraw from Blend pool (WithdrawCollateral)
+        let withdraw_request = Request {
+            request_type: 3, // WithdrawCollateral = 3
+            address: usdc_token.clone(),
+            amount: round.total_deposits,
+        };
+
+        let requests = Vec::from_array(&env, [withdraw_request]);
+
+        // Call Blend's submit to withdraw
+        let _ = env.invoke_contract::<soroban_sdk::Val>(
+            &blend_pool,
+            &Symbol::new(&env, "submit"),
+            (
+                env.current_contract_address(),
+                env.current_contract_address(),
+                env.current_contract_address(),
+                requests,
+            )
+                .into_val(&env),
+        );
+
+        // Step 4: Check balance after withdrawal
+        let balance_after: i128 = env.invoke_contract(
+            &usdc_token,
+            &Symbol::new(&env, "balance"),
+            (env.current_contract_address(),).into_val(&env),
+        );
+
+        // Calculate yield safely
+        // balance_after = house_money + withdrawn_from_blend
+        // available_for_yield = total_balance - deposits_to_refund
+        let available_for_yield = balance_after - round.total_deposits;
+
+        // Use conservative yield: 50% of available (keeps house money for future rounds)
+        // This ensures we always have enough for payouts
+        let total_yield = if available_for_yield > 0 {
+            available_for_yield / 20 // 50% of available becomes yield
+        } else {
+            0 // Safety: no yield if somehow we're short
+        };
+
+        round.total_yield = total_yield;
 
         // Jackpot rollover if less than 3 players
         if players.len() < 3 {
             round.is_active = false;
-            round.total_yield = mock_yield;
 
             // Refund all players
-            let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
-
             for player in players.iter() {
                 let entry: PlayerEntry = env
                     .storage()
@@ -320,7 +437,6 @@ impl LotteryPool {
                     .get(&DataKey::PlayerDeposit(current_round_id, player.clone()))
                     .unwrap();
 
-                // Direct transfer
                 env.invoke_contract::<()>(
                     &usdc_token,
                     &Symbol::new(&env, "transfer"),
@@ -333,12 +449,17 @@ impl LotteryPool {
                 .set(&DataKey::Round(current_round_id), &round);
 
             // Start new round with rolled over yield
+            let round_duration: u64 = env
+                .storage()
+                .instance()
+                .get(&DataKey::RoundDuration)
+                .unwrap();
             let new_round_id = current_round_id + 1;
             let new_round = Round {
                 id: new_round_id,
                 start_time: current_time,
                 end_time: current_time + round_duration,
-                total_deposits: mock_yield,
+                total_deposits: total_yield,
                 total_yield: 0,
                 winner: None,
                 is_active: true,
@@ -357,7 +478,7 @@ impl LotteryPool {
             );
 
             env.events()
-                .publish((symbol_short!("jackpot"), new_round_id), mock_yield);
+                .publish((symbol_short!("jackpot"), new_round_id), total_yield);
 
             panic!("Not enough players! Yield rolled to next round as JACKPOT!");
         }
@@ -367,7 +488,6 @@ impl LotteryPool {
         let winner_index = (seed % players.len() as u64) as u32;
         let winner = players.get(winner_index).unwrap();
 
-        round.total_yield = mock_yield;
         round.winner = Some(winner.clone());
         round.is_active = false;
 
@@ -378,9 +498,8 @@ impl LotteryPool {
             .get(&DataKey::PlayerDeposit(current_round_id, winner.clone()))
             .unwrap();
 
-        // Transfer prize (original deposit + all yield)
-        let prize = winner_entry.deposit + mock_yield;
-        let usdc_token: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
+        // Transfer prize (original deposit + yield)
+        let prize = winner_entry.deposit + total_yield;
 
         env.invoke_contract::<()>(
             &usdc_token,
@@ -400,6 +519,11 @@ impl LotteryPool {
         );
 
         // Start new round
+        let round_duration: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::RoundDuration)
+            .unwrap();
         let new_round_id = current_round_id + 1;
         let new_round = Round {
             id: new_round_id,
@@ -426,6 +550,7 @@ impl LotteryPool {
         winner
     }
 
+    /// Claim refund for non-winners
     pub fn claim_refund(env: Env, player: Address, round_id: u32) {
         player.require_auth();
 

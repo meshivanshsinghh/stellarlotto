@@ -43,3 +43,6 @@ yarn-error.log*
 # Contract deployment info (optional - you might want to commit this)
 .soroban/
 contract-ids.json
+
+
+blend-utils/
