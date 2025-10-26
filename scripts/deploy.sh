@@ -32,6 +32,7 @@ MEDIUM_RESERVE=500000000  # 50 USDC
 WHALE_RESERVE=1000000000  # 100 USDC
 
 export STELLAR_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
+export STELLAR_RPC_URL="https://soroban-testnet.stellar.org"
 
 
 echo "Building MockUSDC..."
